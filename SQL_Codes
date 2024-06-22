@@ -1,0 +1,62 @@
+# Request 1
+SELECT
+    DISTINCT market FROM  dim_customer
+WHERE region = 'APAC' AND customer = "Atliq Exclusive";
+
+
+# Request 2
+with unique_count as(
+select 
+  count(distinct case when fiscal_year=2020 then product_code end) as Unique_Products_20,
+  count(distinct case when fiscal_year=2021 then product_code end) as Unique_Products_21
+from fact_sales_monthly
+)
+select 
+  Unique_Products_20,Unique_Products_21,
+  round(((Unique_Products_21-Unique_Products_20)/Unique_Products_20)*100,1) as Percentage_chg
+  from unique_count
+
+
+# Request 3
+select 
+   segment,count(distinct product_code) as product_count from dim_product
+   group by segment
+   order by product_count desc
+
+
+# Request 4
+with unique_count as (
+     select 
+       p.segment,
+       count(distinct case when fiscal_year=2020 then f.product_code end) as unique_products_20,
+       count(distinct case when fiscal_year=2021 then f.product_code end) as unique_products_21
+       from fact_sales_monthly f join dim_product p
+       where f.product_code=p.product_code
+       group by p.segment
+       )
+       select 
+         segment,unique_products_20,unique_products_21,
+         (unique_products_21-unique_products_20) as difference
+         from unique_count 
+         order by difference desc
+
+
+# Request 5
+with low_cost as (
+     select 
+        product_code,manufacturing_cost from fact_manufacturing_cost m
+        order by manufacturing_cost asc
+        limit 1
+                 ),
+     high_cost as (
+     select 
+        product_code,manufacturing_cost from fact_manufacturing_cost m
+        order by manufacturing_cost desc
+        limit 1 
+                 )
+select 
+   m.product_code,product,manufacturing_cost from 
+  (select * from low_cost
+   union all
+   select * from high_cost)m join dim_product p
+   on m.product_code=p.product_code
