@@ -60,3 +60,96 @@ select
    union all
    select * from high_cost)m join dim_product p
    on m.product_code=p.product_code
+
+
+# Request 6
+select 
+   pi.customer_code,customer,round(avg(pre_invoice_discount_pct),3) as avg_discount_pct from fact_pre_invoice_deductions pi join dim_customer c
+   on pi.customer_code=c.customer_code
+where 
+   fiscal_year="2021" and market="India"
+group by pi.customer_code,customer
+order by avg_discount_pct desc 
+limit 5
+
+
+# Request 7
+WITH temp_table AS (
+    SELECT 
+        customer,
+        monthname(date) AS months,
+        month(date) AS month_number,
+        year(date) AS year,
+        (sold_quantity * gross_price) AS gross_sales
+    FROM 
+        fact_sales_monthly s
+    JOIN 
+        fact_gross_price g ON s.product_code = g.product_code
+    JOIN 
+        dim_customer c ON s.customer_code = c.customer_code
+    WHERE 
+        customer = "Atliq exclusive"
+)
+SELECT 
+    months,
+    year,
+    concat(round(sum(gross_sales)/1000000, 2), "M") AS gross_sales
+FROM 
+    temp_table
+GROUP BY 
+    year, months, month_number
+ORDER BY 
+    year, month_number;
+
+
+# Request 8
+select 
+   case
+       when month(date) in (9,10,11) then 'first quarter'
+       when month(date) in (12,1,2) then 'second quarter'
+       when month(date) in (3,4,5) then 'third quarter'
+       when month(date) in (6,7,8) then 'fourth quarter'
+	end as quarters,
+    round(sum(sold_quantity),1) as total_sold_qty from fact_sales_monthly
+    where fiscal_year="2020"
+    group by quarters
+    order by total_sold_qty desc
+
+
+# Request 9
+with cte1 as (
+     select 
+        channel,round((sum(gross_price*sold_quantity)/1000000),2) as gross_sales_mln
+        from fact_sales_monthly sm join fact_gross_price gp
+        on sm.product_code=gp.product_code
+        join dim_customer c
+        on sm.customer_code=c.customer_code
+     where sm.fiscal_year="2021"
+     group by channel
+     order by gross_sales_mln desc
+     )
+     select *,round((gross_sales_mln*100)/(select sum(gross_sales_mln) from cte1),2) as pct_contribution 
+     from cte1
+
+
+# Request 10
+with cte1 as (
+   select 
+     division,sm.product_code,product,sum(sold_quantity) as total_sold_qty
+     from fact_sales_monthly sm join dim_product p
+     on sm.product_code=p.product_code
+   where fiscal_year="2021"
+   group by product_code,division,product
+   order by total_sold_qty
+    ),
+cte2 as (
+   select 
+      division,product_code,product,total_sold_qty,
+      rank() over(partition by division order by total_sold_qty desc) as rank_order
+from cte1
+     )
+select 
+    cte1.division,cte1.product_code,cte1.product,cte2.total_sold_qty,rank_order 
+    from cte1 join cte2
+    on cte1.product_code=cte2.product_code
+where rank_order in (1,2,3)
